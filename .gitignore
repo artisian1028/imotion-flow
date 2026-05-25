@@ -1,5 +1,5 @@
 # Byte-compiled / optimized / DLL files
-.idea/*
+*.idea/*
 
 __pycache__/
 Data/
@@ -158,3 +158,8 @@ freemocap/system/gui_state.json
 
 # Claude Code local config
 .claude/
+.nuxt
+/tauri-nuxt-vue/.idea/
+dist-electron/
+*/.claude/*
+*.vite/

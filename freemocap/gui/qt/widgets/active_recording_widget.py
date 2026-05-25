@@ -18,8 +18,8 @@ class ActiveRecordingInfoWidget(QWidget):
     new_active_recording_selected_signal = Signal(RecordingInfoModel)
 
     def __init__(
-        self,
-        parent: Optional[QWidget] = None,
+            self,
+            parent: Optional[QWidget] = None,
     ):
         super().__init__(parent=parent)
         self._layout = QVBoxLayout()
@@ -40,7 +40,7 @@ class ActiveRecordingInfoWidget(QWidget):
     def active_recording_view_widget(self):
         return self._active_recording_view_widget
 
-    def get_active_recording_info(self, return_path: bool = False) -> Union[RecordingInfoModel, Path, None]:
+    def get_active_recording_info(self) -> Union[RecordingInfoModel, None]:
         # this is redundant to the `active_recording_info` property,
         # but it will be more intuitive to send this down as a callable
         # rather than relying on 'pass-by-reference' magic lol
@@ -50,14 +50,15 @@ class ActiveRecordingInfoWidget(QWidget):
             if most_recent_path is not None:
                 self.set_active_recording(most_recent_path)
 
-        if return_path:
-            return self._active_recording_info.path
-
         return self._active_recording_info
 
+    def get_active_recording_path(self) -> Optional[Path]:
+        if self._active_recording_info:
+            return Path(self._active_recording_info.path)
+
     def set_active_recording(
-        self,
-        recording_folder_path: Union[str, Path, None],
+            self,
+            recording_folder_path: Union[str, Path, None],
     ):
         if recording_folder_path is None or recording_folder_path == "None":
             logger.info("No recording folder path provided - clearing active recording")
@@ -104,8 +105,8 @@ class ActiveRecordingTreeView(ParameterTree):
         super().__init__(parent=parent, showHeader=False)
 
     def setup_parameter_tree(
-        self,
-        recording_info_model: RecordingInfoModel,
+            self,
+            recording_info_model: RecordingInfoModel,
     ):
         if recording_info_model is None:
             logger.debug("No recording info model provided - clearing parameter tree")

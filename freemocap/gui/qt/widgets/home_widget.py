@@ -22,7 +22,8 @@ from freemocap.gui.qt.actions_and_menus.actions import (
 )
 from freemocap.gui.qt.utilities.save_and_load_gui_state import GuiState, save_gui_state
 from freemocap.gui.qt.widgets.logo_svg_widget import LogoSvgWidget
-from freemocap.system.paths_and_filenames.file_and_folder_names import PATH_TO_FREEMOCAP_LOGO_SVG
+from freemocap.system.paths_and_filenames.file_and_folder_names import DOCUMENTATION_HOME, \
+    DOCUMENTATION_PRIVACY_POLICY_URL, PATH_TO_FREEMOCAP_LOGO_SVG
 from freemocap.system.paths_and_filenames.path_getters import get_gui_state_json_path
 
 logger = logging.getLogger(__name__)
@@ -128,11 +129,11 @@ class HomeWidget(QWidget):
         hbox = QHBoxLayout()
         self._layout.addLayout(hbox)
         hbox.addStretch(1)
-        privacy_policy_link_string = '<a href="https://freemocap.github.io/documentation/community/privacy_policy/" style="color: #333333;">privacy policy</a>'
+        privacy_policy_link_string = f'<a href="{DOCUMENTATION_PRIVACY_POLICY_URL}" style="color: #333333;">privacy policy</a>'
         privacy_policy_link_label = QLabel(privacy_policy_link_string)
         privacy_policy_link_label.setOpenExternalLinks(True)
         hbox.addWidget(privacy_policy_link_label)
-        docs_string = '<a href="https://freemocap.github.io/documentation/" style="color: #333333;">docs</a>'
+        docs_string = f'<a href="{DOCUMENTATION_HOME}" style="color: #333333;">docs</a>'
         docs_string = QLabel(docs_string)
         docs_string.setOpenExternalLinks(True)
         hbox.addWidget(docs_string, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -140,6 +141,12 @@ class HomeWidget(QWidget):
         feedback_string = QLabel(feedback_string)
         feedback_string.setOpenExternalLinks(True)
         hbox.addWidget(feedback_string, alignment=Qt.AlignmentFlag.AlignRight)
+
+        discord_string = '<a href="https://discord.gg/P2nyraRYjb" style="color: #333333;">community</a>'
+        discord_string = QLabel(discord_string)
+        discord_string.setOpenExternalLinks(True)
+        hbox.addWidget(discord_string, alignment=Qt.AlignmentFlag.AlignRight)
+
         donate_string = '<a href="https://freemocap.org/about-us.html#donate" style="color: #333333;">donate &lt;3</a>'
         donate_string = QLabel(donate_string)
         donate_string.setOpenExternalLinks(True)

@@ -2,10 +2,9 @@ import pprint
 from typing import List, Dict, Tuple
 from typing import Optional, Any
 
-from pydantic import BaseModel, Field, root_validator
-
-from freemocap.core_processes.detecting_things_in_2d_images.mediapipe_stuff.data_models.mediapipe_skeleton_names_and_connections import (
-    mediapipe_skeleton_schema,
+from pydantic import BaseModel, Field, model_validator
+from skellytracker.trackers.mediapipe_tracker.mediapipe_model_info import (
+    MediapipeModelInfo,
 )
 
 
@@ -17,6 +16,14 @@ class Point(BaseModel):
     x: Optional[float] = Field(None, description="The X-coordinate of the point")
     y: Optional[float] = Field(None, description="The Y-coordinate of the point")
     z: Optional[float] = Field(None, description="The Z-coordinate of the point")
+
+
+class ReprojectionError(BaseModel):
+    """
+    Reprojection error of a 3D point at a particular time
+    """
+
+    value: Optional[float] = Field(None, description="Reprojection error of the point")
 
 
 class VirtualMarkerDefinition(BaseModel):
@@ -31,7 +38,7 @@ class VirtualMarkerDefinition(BaseModel):
         default_factory=list, description="The weights of the markers that define this virtual marker, must sum to 1"
     )
 
-    @root_validator
+    @model_validator(mode="before")
     def check_weights(cls, values):
         marker_weights = values.get("marker_weights")
         if sum(marker_weights) != 1:
@@ -71,9 +78,9 @@ class SkeletonSchema(BaseModel):
 
     def dict(self):
         d = {}
-        d["body"] = self.body.dict()
-        d["hands"] = {hand: hand_schema.dict() for hand, hand_schema in self.hands.items()}
-        d["face"] = self.face.dict()
+        d["body"] = self.body.model_dump()
+        d["hands"] = {hand: hand_schema.model_dump() for hand, hand_schema in self.hands.items()}
+        d["face"] = self.face.model_dump()
         return d
 
 
@@ -92,6 +99,9 @@ class FrameData(BaseModel):
 
     timestamps: Timestamps = Field(default_factory=Timestamps, description="Timestamp data")
     tracked_points: Dict[str, Point] = Field(default_factory=dict, description="The points being tracked")
+    reprojection_error: Dict[str, ReprojectionError] = Field(
+        default_factory=dict, description="Reprojection error of the point being tracked"
+    )
 
     @property
     def tracked_point_names(self):
@@ -102,19 +112,22 @@ class FrameData(BaseModel):
         return self.timestamps.mean
 
     def to_dict(self):
-        d = {}
-        d["timestamps"] = self.timestamps.dict()
-        d["tracked_points"] = {name: point.dict() for name, point in self.tracked_points.items()}
-        return d
+        return {
+            "timestamps": self.timestamps.model_dump(),
+            "tracked_points": {name: point.model_dump() for name, point in self.tracked_points.items()},
+            "reprojection_error": {name: error.model_dump() for name, error in self.reprojection_error.items()},
+        }
 
 
 class InfoDict(BaseModel):
     """
-    A dictionary of information about this recording, such as the measured segement lengths and the schemas that we can use to interpret the tracked points (i.e./e.g. how to connect the dots of skeleton)
+    A dictionary of information about this recording, such as the measured segement lengths and the segment connections that we can use to interpret the tracked points (i.e./e.g. how to connect the dots of skeleton)
     """
 
     # segment_lengths: Dict[str, Any] = Field(default_factory=dict, description="The lengths of the segments of the body")
-    schemas: List[BaseModel] = Field(default_factory=list, description="The schemas for the tracked points")
+    schemas: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, description="The segment connections for the tracked points"
+    )
 
 
 if __name__ == "__main__":
@@ -123,6 +136,6 @@ if __name__ == "__main__":
 
     print("=====================================\n\n===============================")
 
-    skeleton_schema = SkeletonSchema(schema_dict=mediapipe_skeleton_schema)
+    skeleton_schema = SkeletonSchema(schema_dict=MediapipeModelInfo.skeleton_schema)
 
     pprint.pp(skeleton_schema.dict())

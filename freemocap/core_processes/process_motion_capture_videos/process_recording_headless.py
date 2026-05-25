@@ -20,25 +20,32 @@ logger = logging.getLogger(__name__)
 
 
 def process_recording_headless(
-    recording_path: Union[str, Path],
-    path_to_camera_calibration_toml: Optional[Union[str, Path]] = None,
-    path_to_blender_executable: Optional[Union[str, Path]] = None,
-    recording_processing_parameter_model: Optional[ProcessingParameterModel] = None,
-    use_tqdm: bool = True,
+        recording_path: Union[str, Path],
+        path_to_camera_calibration_toml: Optional[Union[str, Path]] = None,
+        path_to_blender_executable: Optional[Union[str, Path]] = None,
+        recording_processing_parameter_model: Optional[ProcessingParameterModel] = None,
+        recording_info_model: Optional[RecordingInfoModel] = None,
+        run_blender: bool = True,
+        make_jupyter_notebook: bool = True,
+        use_tqdm: bool = True,
 ):
     if path_to_blender_executable is None:
         path_to_blender_executable = get_best_guess_of_blender_path()
     if recording_processing_parameter_model is None:
         recording_processing_parameter_model = ProcessingParameterModel()
-
     rec = recording_processing_parameter_model
+
+    if recording_info_model is None:
+        rec.recording_info_model = RecordingInfoModel(recording_folder_path=Path(recording_path))
+    else:
+        rec.recording_info_model = recording_info_model
 
     logger.info(
         f"Processing recording:\n"
         f"Recording path: {recording_path}\n"
         f"Camera calibration toml path: {path_to_camera_calibration_toml}\n"
         f"Blender executable path: {path_to_blender_executable}\n"
-        f"Recording processing parameter model: {rec.dict()}"
+        f"Recording processing parameter model: {rec.model_dump()}"
     )
 
     rec.recording_info_model = RecordingInfoModel(recording_folder_path=Path(recording_path))
@@ -53,7 +60,7 @@ def process_recording_headless(
                 f"There are {number_of_videos} videos. Must provide a calibration toml file for multicamera recordings."
             )
 
-    recording_info_dict = rec.dict(exclude={"recording_info_model"})
+    recording_info_dict = rec.model_dump(exclude={"recording_info_model"})
 
     Path(rec.recording_info_model.output_data_folder_path).mkdir(parents=True, exist_ok=True)
 
@@ -66,10 +73,11 @@ def process_recording_headless(
     logger.info("Starting core processing pipeline...")
     process_recording_folder(recording_processing_parameter_model=rec, use_tqdm=use_tqdm)
 
-    logger.info("Generating jupyter notebook...")
-    generate_jupyter_notebook(path_to_recording=recording_path)
+    if make_jupyter_notebook:
+        logger.info("Generating jupyter notebook...")
+        generate_jupyter_notebook(path_to_recording=recording_path)
 
-    if path_to_blender_executable:
+    if path_to_blender_executable and run_blender:
         blender_file_path = get_blender_file_path(recording_folder_path=recording_path)
         logger.info(f"Exporting to {blender_file_path}")
         export_to_blender(
@@ -77,6 +85,8 @@ def process_recording_headless(
             blender_file_path=blender_file_path,
             blender_exe_path=Path(path_to_blender_executable),
         )
+    elif not run_blender:
+        logger.info("Skipping blender export")
     else:
         logger.warning("No blender executable provided. Blender file will not be exported.")
 

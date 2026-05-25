@@ -3,7 +3,7 @@ import multiprocessing
 import shutil
 import threading
 from pathlib import Path
-from typing import Callable, Union
+from typing import Callable
 
 from PySide6.QtCore import Signal, Slot, Qt
 from PySide6.QtGui import QFont
@@ -18,13 +18,14 @@ from freemocap.gui.qt.utilities.save_and_load_gui_state import GuiState
 from freemocap.gui.qt.widgets.control_panel.calibration_control_panel import CalibrationControlPanel
 from freemocap.gui.qt.widgets.control_panel.process_mocap_data_panel.parameter_groups.create_parameter_groups import (
     create_mediapipe_parameter_group,
-    create_3d_triangulation_parameter_group,
     create_post_processing_parameter_group,
     extract_parameter_model_from_parameter_tree,
     RUN_IMAGE_TRACKING_NAME,
     RUN_3D_TRIANGULATION_NAME,
     RUN_BUTTERWORTH_FILTER_NAME,
-    NUMBER_OF_PROCESSES_PARAMETER_NAME,
+    NUMBER_OF_PROCESSES_PARAMETER_NAME, OUTLIER_REJECTION_MINIMUM_CAMERAS_FOR_TRIANGULATION,
+    OUTLIER_REJECTION_TREE_NAME, USE_OUTLIER_REJECTION_METHOD, OUTLIER_REJECTION_MAXIMUM_CAMERAS_TO_DROP,
+    OUTLIER_REJECTION_TARGET_REPROJECTION_ERROR, FLATTEN_SINGLE_CAMERA_DATA,
 )
 from freemocap.gui.qt.workers.process_motion_capture_data_thread_worker import (
     ProcessMotionCaptureDataThreadWorker,
@@ -39,7 +40,7 @@ class ProcessMotionCaptureDataPanel(QWidget):
     def __init__(
         self,
         recording_processing_parameters: ProcessingParameterModel,
-        get_active_recording_info: Callable[..., Union[RecordingInfoModel, Path]],
+        get_active_recording_info: Callable[..., RecordingInfoModel],
         kill_thread_event: threading.Event,
         log_update: Callable,
         gui_state: GuiState,
@@ -93,8 +94,14 @@ class ProcessMotionCaptureDataPanel(QWidget):
     def process_motion_capture_data_button(self):
         return self._process_motion_capture_data_button
 
-    def calibrate_from_active_recording(self, charuco_square_size_mm: float):
-        self._calibration_control_panel.calibrate_from_active_recording(charuco_square_size_mm=charuco_square_size_mm)
+    def calibrate_from_active_recording(
+        self, charuco_square_size_mm: float, use_charuco_as_groundplane: bool, charuco_board_name: str
+    ):
+        self._calibration_control_panel.calibrate_from_active_recording(
+            charuco_square_size_mm=charuco_square_size_mm,
+            use_charuco_as_groundplane=use_charuco_as_groundplane,
+            charuco_board_name=charuco_board_name,
+        )
 
     def update_calibration_path(self) -> None:
         self._calibration_control_panel.update_calibrate_from_active_recording_button_text()
@@ -126,7 +133,7 @@ class ProcessMotionCaptureDataPanel(QWidget):
                     children=[
                         self._create_new_run_this_step_parameter(run_step_name=RUN_IMAGE_TRACKING_NAME),
                         self._create_num_processes_parameter(),
-                        create_mediapipe_parameter_group(session_processing_parameter_model.mediapipe_parameters_model),
+                        create_mediapipe_parameter_group(session_processing_parameter_model.tracking_parameters_model),
                     ],
                     tip="Methods for tracking 2d points in images (e.g. mediapipe, deeplabcut(TODO), openpose(TODO), etc ...)",
                 ),
@@ -135,9 +142,55 @@ class ProcessMotionCaptureDataPanel(QWidget):
                     type="group",
                     children=[
                         self._create_new_run_this_step_parameter(run_step_name=RUN_3D_TRIANGULATION_NAME),
-                        create_3d_triangulation_parameter_group(
-                            session_processing_parameter_model.anipose_triangulate_3d_parameters_model
+                        dict(
+                            name=OUTLIER_REJECTION_MINIMUM_CAMERAS_FOR_TRIANGULATION,
+                            type="int",
+                            value=session_processing_parameter_model.anipose_triangulate_3d_parameters_model.minimum_cameras_for_triangulation, #TODO - this is shoehorned and ugly, but good enough for EoL v1
+                            limits=(1, 100),
+                            step=1,
+                            tip="Minimum number of cameras required for triangulation.",
                         ),
+
+                        dict(
+                            name=FLATTEN_SINGLE_CAMERA_DATA,
+                            type="bool",
+                            value=
+                            session_processing_parameter_model.anipose_triangulate_3d_parameters_model.flatten_single_camera_data,
+                            tip="If true, flatten the data from single camera recordings.",
+                        ),
+                        dict(
+                            name=OUTLIER_REJECTION_TREE_NAME,
+                            type="group",
+                            children=[
+                                dict(
+                                    name=USE_OUTLIER_REJECTION_METHOD,
+                                    type="bool",
+                                    value=
+                            session_processing_parameter_model.anipose_triangulate_3d_parameters_model.use_triangulate_outlier_rejection,
+                                    tip="If true, use `anipose`'s `triangulate_using_outlier_rejection` method.",
+                                ),
+                                dict(
+                                    name=OUTLIER_REJECTION_MAXIMUM_CAMERAS_TO_DROP,
+                                    type="int",
+                                    value=
+                            session_processing_parameter_model.anipose_triangulate_3d_parameters_model.maximum_cameras_to_drop,
+                                    limits=(0, 100),
+                                    step=1,
+                                    tip="Maximum amount of cameras permitted to drop.",
+                                ),
+                                dict(
+                                    name=OUTLIER_REJECTION_TARGET_REPROJECTION_ERROR,
+                                    type="float",
+                                    value=
+                            session_processing_parameter_model.anipose_triangulate_3d_parameters_model.target_reprojection_error,
+                                    limits=(0.0, 1.0),
+                                    step=0.001,
+                                    tip="The target reprojection error that stops the outlier rejection search.\n"
+                                        "If a camera combination achieves an error below this value, it is accepted and further dropped-camera iterations are skipped.",
+                                ),
+                            ],
+                        ),
+
                     ],
                     tip="Methods for triangulating 3d points from 2d points (using epipolar geometry and the 'camera_calibration' data).",
                 ),
@@ -248,6 +301,9 @@ class ProcessMotionCaptureDataPanel(QWidget):
                     / Path(selected_camera_calibration_toml_path).name
                 )
                 shutil.copyfile(selected_camera_calibration_toml_path, copied_toml_path)
+
+        # set active tracker in recording model to the currently selected tracker
+        session_parameter_model.recording_info_model.active_tracker = session_parameter_model.tracking_model_info.name
 
         self._process_motion_capture_data_thread_worker = ProcessMotionCaptureDataThreadWorker(
             session_parameter_model, kill_event=self._kill_thread_event
